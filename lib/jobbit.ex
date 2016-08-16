@@ -34,10 +34,8 @@ defmodule Jobbit do
       {:DOWN, ^ref, _, _, reason} ->
         {:error, reason}
       x ->
-        # this may never happen... but...
-        Logger.error("Jobbit error: #{inspect x}")
         Process.demonitor(ref, [:flush])
-        {:error, :internal_error}
+        {:error, x}
     after
       timeout ->
         Process.demonitor(ref, [:flush])
