@@ -8,7 +8,9 @@ defmodule Jobbit.Mixfile do
       elixir: "~> 1.3",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
-      deps: deps,
+      description: description(),
+      package: package(),
+      deps: deps(),
     ]
   end
 
@@ -32,17 +34,17 @@ defmodule Jobbit.Mixfile do
 
   defp description do
     """
-    A few sentences (a paragraph) describing the project.
+    Execute tasks without crashing the parent process.
     """
   end
 
   defp package do
-    [# These are the default files included in the package
-     name: :jobbit,
-     files: ["lib", "priv", "mix.exs", "README*", "readme*", "LICENSE*", "license*"],
-     maintainers: ["Eric Meadows-Jönsson", "José Valim"],
-     licenses: ["Apache 2.0"],
-     links: %{"GitHub" => "https://github.com/ericmj/postgrex",
-              "Docs" => "http://ericmj.github.io/postgrex/"}]
+    [
+      name: :jobbit,
+      files: ["lib", "mix.exs", "README*", "readme*", "LICENSE*", "test"],
+      maintainers: ["Jason Goldberger"],
+      licenses: ["MIT"],
+      links: %{"GitHub" => "https://github.com/elbow-jason/jobbit"},
+    ]
   end
 end

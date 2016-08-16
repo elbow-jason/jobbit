@@ -12,8 +12,10 @@ defmodule JobbitTest do
 
   # despite red text appearing this test passes
   test "async await does not crash parent process when an exception occurs" do
-    {:error, reason} = Jobbit.async(fn -> 1/0 end) |> Jobbit.await
-    assert reason |> elem(0) == :badarith
+    error_message = "This is an intentional exception for testing purposes"
+    result = Jobbit.async(fn -> raise error_message end) |> Jobbit.await
+    assert result |> is_tuple
+    assert result |> elem(0) == :error
   end
 
 end

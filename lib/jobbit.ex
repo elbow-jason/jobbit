@@ -10,7 +10,6 @@ defmodule Jobbit do
   def async(fun) do
     async(:erlang, :apply, [fun, []])
   end
-
   def async(mod, func, args) do
     owner = self
     pid = spawn(fn -> run(owner, fn -> apply(mod, func, args) end) end)
@@ -27,12 +26,12 @@ defmodule Jobbit do
   def await(%Jobbit{owner: owner}, _) when owner != self do
     raise "Invalid Jobbit owner"
   end
-  def await(%Jobbit{ref: ref} = task, timeout) do
+  def await(%Jobbit{ref: ref}, timeout) do
     receive do
       {^ref, reply} ->
         Process.demonitor(ref, [:flush])
         {:ok, reply}
-      {:DOWN, ^ref, _, proc, reason} ->
+      {:DOWN, ^ref, _, _, reason} ->
         {:error, reason}
       x ->
         # this may never happen... but...
