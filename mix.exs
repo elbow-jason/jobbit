@@ -29,7 +29,9 @@ defmodule Jobbit.Mixfile do
   end
 
   defp deps do
-    []
+    [
+      {:ex_doc, ">= 0.0.0", only: :dev}
+    ]
   end
 
   defp description do
@@ -41,7 +43,7 @@ defmodule Jobbit.Mixfile do
   defp package do
     [
       name: :jobbit,
-      files: ["lib", "mix.exs", "README*", "readme*", "LICENSE*", "test"],
+      files: ["lib", "mix.exs", "README*", "LICENSE*", "test"],
       maintainers: ["Jason Goldberger"],
       licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/elbow-jason/jobbit"},
