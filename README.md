@@ -17,7 +17,7 @@ If [available in Hex](https://hex.pm/docs/publish), the package can be installed
 
     ```elixir
     def deps do
-      [{:jobbit, "~> 0.1.0"}]
+      [{:jobbit, "~> 0.2.0"}]
     end
     ```
 
