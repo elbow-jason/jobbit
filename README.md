@@ -6,7 +6,8 @@ process
 ## Usage
 
 Usage is just like `Task.async` and `Task.await` except `Jobbit` will not crash
-the parent process when an error occurs.
+the parent process when an error occurs. Jobbit's `await` (`Jobbit.await`)
+returns `{:ok, result}` or `{:error, reason}`.
 
 ## Installation
 
