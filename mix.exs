@@ -29,4 +29,20 @@ defmodule Jobbit.Mixfile do
   defp deps do
     []
   end
+
+  defp description do
+    """
+    A few sentences (a paragraph) describing the project.
+    """
+  end
+
+  defp package do
+    [# These are the default files included in the package
+     name: :jobbit,
+     files: ["lib", "priv", "mix.exs", "README*", "readme*", "LICENSE*", "license*"],
+     maintainers: ["Eric Meadows-Jönsson", "José Valim"],
+     licenses: ["Apache 2.0"],
+     links: %{"GitHub" => "https://github.com/ericmj/postgrex",
+              "Docs" => "http://ericmj.github.io/postgrex/"}]
+  end
 end
