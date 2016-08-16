@@ -1,6 +1,12 @@
 # Jobbit
 
-**TODO: Add description**
+A small Elixir module allows execution of tasks without crashing the parent
+process
+
+## Usage
+
+Usage is just like `Task.async` and `Task.await` except `Jobbit` will not crash
+the parent process when an error occurs.
 
 ## Installation
 
@@ -22,3 +28,6 @@ If [available in Hex](https://hex.pm/docs/publish), the package can be installed
     end
     ```
 
+## Todos
+
++ type_specs
