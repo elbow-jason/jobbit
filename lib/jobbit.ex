@@ -33,9 +33,13 @@ defmodule Jobbit do
         {:ok, reply}
       {:DOWN, ^ref, _, _, reason} ->
         {:error, reason}
-      x ->
+      {other_ref, reply} when other_ref |> is_reference ->
+        Logger.error("Unknown Reference:\n\tExpected: #{inspect ref}\n\tGot: #{inspect other_ref}")
         Process.demonitor(ref, [:flush])
-        {:error, x}
+        {:error, {:failed_job, reply}}
+      x ->
+        Logger.error("Unknown Error #{inspect x}")
+        {:error, {:unknown_failure, x}}
     after
       timeout ->
         Process.demonitor(ref, [:flush])
