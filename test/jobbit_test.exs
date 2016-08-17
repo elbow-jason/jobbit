@@ -11,11 +11,33 @@ defmodule JobbitTest do
   end
 
   # despite red text appearing this test passes
-  test "async await does not crash parent process when an exception occurs" do
+  test "async/await does not crash parent process when an exception occurs" do
     error_message = "This is an intentional exception for testing purposes"
     result = Jobbit.async(fn -> raise error_message end) |> Jobbit.await
     assert result |> is_tuple
     assert result |> elem(0) == :error
+  end
+
+  test "async/await works for multiple jobs and keeps them in order" do
+    result = 1..5
+      |> Enum.map(fn num ->
+        Jobbit.async(fn ->
+          time = (33 * num)
+          :timer.sleep(300 - time)
+          time
+        end)
+      end)
+      |> Enum.map(fn job -> Jobbit.await(job) end)
+    assert result == [ok: 33, ok: 66, ok: 99, ok: 132, ok: 165]
+    # make sure there are no lingering messages...
+    # if so we may be leaking mem...
+    thing = receive do
+      x -> x
+    after
+      1 ->
+        nil
+    end
+    assert thing == nil
   end
 
 end
