@@ -14,8 +14,7 @@ defmodule JobbitTest do
   test "async/await does not crash parent process when an exception occurs" do
     error_message = "This is an intentional exception for testing purposes"
     result = Jobbit.async(fn -> raise error_message end) |> Jobbit.await
-    assert result |> is_tuple
-    assert result |> elem(0) == :error
+    assert result == {:error, %RuntimeError{message: error_message}}
   end
 
   test "async/await works for multiple jobs and keeps them in order" do
