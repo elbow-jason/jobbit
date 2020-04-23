@@ -11,12 +11,8 @@ defmodule Jobbit.Mixfile do
       description: description(),
       package: package(),
       deps: deps(),
-      apps: apps()
+      elixirc_paths: elixirc_paths(Mix.env())
     ]
-  end
-
-  defp apps do
-    []
   end
 
   defp deps do
@@ -24,6 +20,9 @@ defmodule Jobbit.Mixfile do
       {:ex_doc, ">= 0.0.0", only: :dev}
     ]
   end
+
+  defp elixirc_paths(:prod), do: ["lib"]
+  defp elixirc_paths(_), do: ["lib", "test/support"]
 
   defp description do
     """
