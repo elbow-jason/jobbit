@@ -29,16 +29,15 @@ Tasks in `Jobbit` can be run with a closure:
 
 ```elixir
 Jobbit.async(fn -> :ok end)
-=> %Jobbit{task: %Task{...}}
+=> %Jobbit{}
 ```
 
 Or with a `module`, `func`, and `args` (similar to `apply/3`):
 
 ```elixir
 Jobbit.async_apply(Kernel, :div, [1, 0])
-=> %Jobbit{task: %Task{...}}
+=> %Jobbit{}
 ```
-
 
 ## FAQ
 
