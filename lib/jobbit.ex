@@ -56,6 +56,7 @@ defmodule Jobbit do
     iex> is_pid(pid)
     true
     iex> Process.whereis(:jobbit_test_task_sup) == pid
+    true
   """
   @spec start_link([option]) :: on_start()
   def start_link(opts \\ []), do: Task.Supervisor.start_link(opts)
