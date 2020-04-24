@@ -146,7 +146,8 @@ An example of configuring `:jobbit`:
 ```elixir
 config :jobbit,
   start_jobbit?: true,
-  default_supervisor: Jobbit.DefaultTaskSupervisor
+  default_supervisor: Jobbit.DefaultTaskSupervisor,
+  default_supervisor_opts: []
 ```
 
 
