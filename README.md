@@ -1,5 +1,7 @@
 # Jobbit
 
+![Jobbit CI](https://github.com/elbow-jason/jobbit/workflows/Jobbit%20CI/badge.svg)
+
 Run risky tasks asynchronously or synchronously without endangering the
 calling process.
 
