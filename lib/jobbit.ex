@@ -1,7 +1,14 @@
 defmodule Jobbit do
-  @moduledoc __DIR__
-    |> Path.join("../README.md")
-    |> File.read!()
+  # get the absolute path to via the relative path of this file to the README.
+  @readme_path Path.join(__DIR__, "../README.md")
+
+  # ensure the module recompiles if the README changes
+  # NOTE: @external_resource requires an absolute path.
+  @external_resource @readme_path
+
+  # read the README into the moduledoc
+  @moduledoc File.read!(@readme_path)
+
 
   alias Jobbit.Configuration
   alias Jobbit.TimeoutError
