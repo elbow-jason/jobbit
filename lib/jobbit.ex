@@ -1,78 +1,141 @@
 defmodule Jobbit do
-  require Logger
+  @moduledoc __DIR__
+    |> Path.join("../README.md")
+    |> File.read!()
 
-  defstruct [
-    pid: nil,
-    ref: nil,
-    owner: nil,
-  ]
+  alias Jobbit.Configuration
+  alias Jobbit.TimeoutError
+  alias Jobbit.TaskError
 
-  def async(func) do
-    async(:erlang, :apply, [func, []])
-  end
-  def async(mod, func_atom, args) do
-    owner = self
-    pid = spawn(fn -> run(owner, make_func(mod, func_atom, args)) end)
-    ref = Process.monitor(pid)
-    send(pid, {owner, ref})
-    %Jobbit{
-      pid: pid,
-      ref: ref,
-      owner: self,
+  @type supervisor_t :: Task.Supervisor
+  @type supervisor :: atom() | pid() | {atom, any} | {:via, atom, any}
+  @type args :: list(any)
+
+  @type closure :: (() -> any())
+  @type func_name :: atom()
+
+  @type exit_error :: {:exit, TimeoutError.t() | TaskError.t()}
+  @type result :: :ok | {:ok, any()} | {:error, any()} | exit_error()
+  @type option :: Task.Supervisor.option()
+  @type on_start :: Task.Supervisor.on_start()
+
+  @enforce_keys [:task]
+
+  @type t :: %Jobbit{
+    task: Task.t()
+  }
+
+  defstruct [:task]
+
+  @doc """
+  The `child_spec` for a `Jobbit` task supervisor. This `child_spec`
+  forwards the provided `jobbit_opts` to `Jobbit.start_link/1` when
+  the `child_spec` is applied as a child by a supervisor.
+  """
+  @spec child_spec([option]) :: Supervisor.child_spec()
+  def child_spec(jobbit_opts \\ []) do
+    %{
+      id: Jobbit,
+      start: {Jobbit, :start_link, [jobbit_opts]},
+      type: :supervisor,
+      restart: :permanent,
+      shutdown: 1_000,
     }
   end
 
-  def await(job, timeout \\ 5000, seen \\ [])
-  def await(%Jobbit{owner: owner}, _, _) when owner != self do
-    raise "Invalid Jobbit owner"
+  @doc """
+  Starts a Task.Supervisor passing the provided `option` list.
+
+  Example:
+
+    iex> {:ok, pid} = Jobbit.start_link()
+    iex> is_pid(pid)
+    true
+
+    iex> {:ok, pid} = Jobbit.start_link(name: :jobbit_test_task_sup)
+    iex> is_pid(pid)
+    true
+    iex> Process.whereis(:jobbit_test_task_sup) == pid
+  """
+  @spec start_link([option]) :: on_start()
+  def start_link(opts \\ []), do: Task.Supervisor.start_link(opts)
+
+  @doc """
+  Runs the given `closure` as an unlinked, asynchronous, task process supervised
+  by the provided or configured (default: `Jobbit.DefaultTaskSupervisor`)
+  `supervisor`.
+
+  See `Task.Supervisor.async_nolink/3` for `opts` details.
+  """
+  @spec async(supervisor, closure(), Keyword.t()) :: t()
+  def async(supervisor \\ default_supervisor(), closure, opts \\ []) when is_function(closure, 0) do
+    supervisor
+    |> Task.Supervisor.async_nolink(closure, opts)
+    |> build()
   end
-  def await(%Jobbit{ref: ref} = job, timeout, seen) do
-    if Enum.member?(seen, ref) do
-      {:error, :internal_error}
-    else
-      receive do
-        {^ref, reply} ->
-          Process.demonitor(ref, [:flush])
-          {:ok, reply}
-        {:DOWN, ^ref, _, _, {reason, _details}} ->
-          {:error, reason}
-        {:DOWN, ^ref, _, _, :normal} ->
-          await(job, timeout, seen)
-        {:DOWN, ^ref, _, _, reason} ->
-          {:error, reason}
-        {other_ref, reply} when other_ref |> is_reference ->
-          send self, {other_ref, reply}
-          await(job, timeout, [other_ref|seen])
-        {:DOWN, other_ref, some_atom, pid, reason} when other_ref |> is_reference ->
-          send self, {:DOWN, other_ref, some_atom, pid, reason}
-          await(job, timeout, [other_ref|seen])
-        x ->
-          {:error, :internal_error}
-      after
-        timeout ->
-          Process.demonitor(ref, [:flush])
-          {:error, :timeout}
-      end
+
+  @doc """
+  Runs the given `module`, `func`, and `args` an unlinked, asynchronous task
+  process supervised by the provided or configured (default:
+  `Jobbit.DefaultTaskSupervisor`) `supervisor`.
+
+  The `opts` arg is forwarded as-is to `Task.Supervisor.async_nolink/3`.
+  """
+  @spec async_apply(supervisor(), module(), func_name(), args(), opts :: Keyword.t()) :: t()
+  def async_apply(supervisor \\ default_supervisor(), module, func, args, opts \\ []) do
+    supervisor
+    |> Task.Supervisor.async_nolink(module, func, args, opts)
+    |> build()
+  end
+
+  defguardp is_ok_tuple(t) when is_tuple(t) and elem(t, 0) == :ok
+  defguardp is_error_tuple(t) when is_tuple(t) and elem(t, 0) == :error
+
+  @doc """
+  Synchronously blocks the calling process waiting for the Jobbit task to
+  finish successfully, crash, or timeout.
+
+  Similar to `Task.yield/2`, `Jobbit.yield2/` takes a task and a `timeout` in
+  milliseconds (default: 5000).
+
+  If the task process crashes or times out the return value is either
+  `{:exit, %Jobbit.TaskError{}}` or `{:exit, %Jobbit.TimeoutError{}}`.
+  """
+  @spec yield(Jobbit.t(), timeout) :: result()
+  def yield(%Jobbit{task: task}, timeout \\ 5_000) do
+    case Task.yield(task, timeout) || Task.shutdown(task) do
+      {:ok, :ok} ->
+        :ok
+      {:ok, okay} when is_ok_tuple(okay) ->
+        okay
+      {:ok, err} when is_error_tuple(err) ->
+        err
+      okay when is_ok_tuple(okay) ->
+        okay
+      nil ->
+        error = TimeoutError.build(task, timeout)
+        {:error, error}
+      {:exit, {exception, stacktrace}} ->
+        error = TaskError.build(task, exception, stacktrace)
+        {:error, error}
     end
   end
 
-  defp run(owner, func, timeout \\ 500) when owner |> is_pid and func |> is_function do
-    receive do
-      {^owner, ref} -> send owner, {ref, func.()}
-      err -> invalid_owner_error(err, owner)
-    after
-      timeout ->
-        send owner, {:error, :worker_timeout}
+  @type shutdown :: :brutal_kill | :infinity | non_neg_integer()
+
+  @doc """
+  Shuts down a Jobbit task.
+  """
+  @spec shutdown(t(), shutdown()) :: :ok | {:exit, any} | {:ok, any}
+  def shutdown(%Jobbit{task: task}, shutdown \\ 5_000) do
+    case Task.shutdown(task, shutdown) do
+      nil -> :ok
+      other -> other
     end
   end
 
-  defp make_func(mod, func_atom, args) do
-    fn -> apply(mod, func_atom, args) end
-  end
+  @spec default_supervisor :: atom()
+  def default_supervisor, do: Configuration.default_supervisor()
 
-  defp invalid_owner_error(err, master) do
-    Logger.error("Jobbit - Invalid :owner\n\tExpected {#{inspect master}, ref}\n\tGot #{inspect err}")
-    exit(:shutdown)
-  end
-
+  defp build(%Task{} = task), do: %Jobbit{task: task}
 end
