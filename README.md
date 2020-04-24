@@ -41,6 +41,22 @@ Jobbit.async_apply(Kernel, :div, [1, 0])
 => %Jobbit{}
 ```
 
+A task can be synchronized:
+
+```elixir
+task = Jobbit.async(fn -> MyClient.send_request(payload) end)
+=> %Jobbit{}
+
+task
+|> Jobbit.yield(2000) # yield with a custom timeout
+|> case do
+  {:ok, %SomeResponse{}} -> :request_succeeded
+  {:error, :not_authorized} -> :request_returned_an_error
+  {:error, %TaskError{}} -> :request_crashed
+  {:error, %TimeoutError{}} -> :request_timeout
+end
+```
+
 ## FAQ
 
 #### How is `Jobbit` like `Task`?
