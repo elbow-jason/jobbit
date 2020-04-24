@@ -20,7 +20,7 @@ Add `jobbit` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:jobbit, "~> 0.4.0"},
+    {:jobbit, github: "elbow-jason/jobbit", ref: "b5c686c"},
   ]
 end
 ```
