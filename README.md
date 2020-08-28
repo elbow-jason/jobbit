@@ -1,6 +1,7 @@
 # Jobbit
 
 ![Jobbit CI](https://github.com/elbow-jason/jobbit/workflows/Jobbit%20CI/badge.svg)
+[![Hex version badge](https://img.shields.io/hexpm/v/jobbit.svg)](https://hex.pm/packages/jobbit)
 
 Run risky tasks asynchronously or synchronously without endangering the
 calling process.
@@ -20,7 +21,7 @@ Add `jobbit` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:jobbit, github: "elbow-jason/jobbit", ref: "b5c686c"},
+    {:jobbit, "~> 0.5.0"},
   ]
 end
 ```
