@@ -1,4 +1,10 @@
 defmodule Jobbit.TaskError do
+  @moduledoc """
+  Exception generated when the Jobbit task process raises an exception.
+
+  Captures the `Task`, the `exception` that was raised, and the stacktrace
+  of the task's process.
+  """
   alias Jobbit.TaskError
 
   @type stack_item :: {atom(), atom(), integer(), Keyword.t()}
@@ -12,6 +18,7 @@ defmodule Jobbit.TaskError do
 
   defexception [:task, :exception, :stacktrace]
 
+  @doc false
   @spec build(Task.t(), exception, [stack_item]) :: t()
   def build(%Task{} = task, exception, stacktrace) when is_list(stacktrace) do
     %TaskError{
@@ -21,12 +28,14 @@ defmodule Jobbit.TaskError do
     }
   end
 
+  @doc false
   def message(%TaskError{} = error) do
     """
     Jobbit task encountered an exception.
-    task: #{render_task(error)}
-    exception: #{render_exception(error)}
-    stacktrace: #{render_stacktrace(error)}
+
+      task: #{render_task(error)}
+      exception: #{render_exception(error)}
+      stacktrace: #{render_stacktrace(error)}
     """
   end
 

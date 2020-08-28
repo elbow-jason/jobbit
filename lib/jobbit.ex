@@ -9,8 +9,8 @@ defmodule Jobbit do
   # read the README into the moduledoc
   @moduledoc File.read!(@readme_path)
 
-
   alias Jobbit.Configuration
+  alias Jobbit.ExitError
   alias Jobbit.TimeoutError
   alias Jobbit.TaskError
 
@@ -19,12 +19,12 @@ defmodule Jobbit do
   @type args :: list(any)
 
   @type closure :: (() -> any())
-  @type func_name :: atom()
-
-  @type exit_error :: {:exit, TimeoutError.t() | TaskError.t()}
-  @type result :: :ok | {:ok, any()} | {:error, any()} | exit_error()
   @type option :: Task.Supervisor.option()
   @type on_start :: Task.Supervisor.on_start()
+  @type func_name :: atom()
+
+  @type error :: TimeoutError.t() | TaskError.t() | ExitError.t()
+  @type result :: :ok | {:ok, any()} | {:error, any()} | tuple() | {:error, error}
 
   @enforce_keys [:task]
 
@@ -35,6 +35,8 @@ defmodule Jobbit do
   defstruct [:task]
 
   @doc """
+  The child spec for a Jobbit.
+
   The `child_spec` for a `Jobbit` task supervisor. This `child_spec`
   forwards the provided `jobbit_opts` to `Jobbit.start_link/1` when
   the `child_spec` is applied as a child by a supervisor.
@@ -69,9 +71,10 @@ defmodule Jobbit do
   def start_link(opts \\ []), do: Task.Supervisor.start_link(opts)
 
   @doc """
-  Runs the given `closure` as an unlinked, asynchronous, task process supervised
-  by the provided or configured (default: `Jobbit.DefaultTaskSupervisor`)
-  `supervisor`.
+  Runs the given `closure` as a task on the given `supervisor`.
+
+  The task runs as an unlinked, asynchronous, task process supervised by the
+  `supervisor` (default: `Jobbit.DefaultTaskSupervisor`).
 
   See `Task.Supervisor.async_nolink/3` for `opts` details.
   """
@@ -83,11 +86,12 @@ defmodule Jobbit do
   end
 
   @doc """
-  Runs the given `module`, `func`, and `args` an unlinked, asynchronous task
-  process supervised by the provided or configured (default:
-  `Jobbit.DefaultTaskSupervisor`) `supervisor`.
+  Runs the given `module`, `func`, and `args` as a task on the given `supervisor`.
 
-  The `opts` arg is forwarded as-is to `Task.Supervisor.async_nolink/3`.
+  The task runs as an unlinked, asynchronous, task process supervised by the
+  `supervisor` (default: `Jobbit.DefaultTaskSupervisor`).
+
+  See `Task.Supervisor.async_nolink/3` for `opts` details.
   """
   @spec async_apply(supervisor(), module(), func_name(), args(), opts :: Keyword.t()) :: t()
   def async_apply(supervisor \\ default_supervisor(), module, func, args, opts \\ []) do
@@ -100,18 +104,78 @@ defmodule Jobbit do
   defguardp is_error_tuple(t) when is_tuple(t) and elem(t, 0) == :error
 
   @doc """
-  Synchronously blocks the calling process waiting for the Jobbit task to
-  finish successfully, crash, or timeout.
+  Synchronously blocks the caller waiting for the Jobbit task to finish.
 
-  Similar to `Task.yield/2`, `Jobbit.yield2/` takes a task and a `timeout` in
-  milliseconds (default: 5000).
+  ## Easier than `Task.yield/2`
 
-  If the task process crashes or times out the return value is either
-  `{:exit, %Jobbit.TaskError{}}` or `{:exit, %Jobbit.TimeoutError{}}`.
+  When yielding with the Task module it is the caller's responsibility to
+  ensure a task does not live beyond it's timeout. The Task documentation
+  recommends the following code:
+
+      Task.yield(task, timeout) || Task.shutdown(task)
+
+  With the above code, if the caller to `Task.yield/2` forgets to call
+  `Task.shutdown/1` the running task *might* never stop. Additionally, the
+  outcome of call above is not very straight forward; there are a multitude
+  of return values (If you are curious take a look at the source code of
+  `yield/2`).
+
+  In Jobbit, `yield/2` calls both `Task.yield/2` and `Task.shutdown/2` and
+  wraps/handles the multitude of result types
+
+  ## Outcomes
+
+  Yielding a Jobbit task with `yield/2` will result in 1 of 4 outcomes:
+
+    - success: The task finished without crashing the task process.
+      In the case of success, the return value with be either an ok-tuple
+      that the closure/mfa returned, an error-tuple that the closure/mfa
+      returned, or `{:ok, returned_value}` where `returned_value` was the
+      return value from the closure.
+
+    - exception: An exception occured while the task was running and the task
+      process crashed. When a exception occurs during task execution the return
+      value is `{:error, TaskError.t()}`. The TaskError itself is an exception
+      (it can be raised). Also, TaskError wraps the task's exception and
+      stacktrace which can be used to find the cause of the exception or
+      reraised if necessary.
+
+    - timeout: The task took too long to complete and was gracefully shut down.
+      In the case of a timeout, `yield/2` returns `{:error, TimeoutError.t()}`.
+      TimeoutError is an exception (it can be raised) that wraps the `timeout`
+      value.
+
+    - exit: The task process was terminated with an exit signal e.g.
+    `Process.exit(pid, :kill)`. In the case of a non-exception exit signal,
+    `yield/2` returns `{:error, ExitError.t()}`. ExitError
+
   """
   @spec yield(Jobbit.t(), timeout) :: result()
   def yield(%Jobbit{task: task}, timeout \\ 5_000) do
-    case Task.yield(task, timeout) || Task.shutdown(task) do
+    result = Task.yield(task, timeout) || Task.shutdown(task)
+    handle_result(result, task, timeout)
+  end
+
+  @type shutdown :: :brutal_kill | :infinity | non_neg_integer()
+
+  @doc """
+  Shuts down a Jobbit task.
+  """
+  @spec shutdown(t(), shutdown()) :: result()
+  def shutdown(%Jobbit{task: task}, shutdown \\ 5_000) do
+    case Task.shutdown(task, shutdown) do
+      nil -> :ok
+      result -> handle_result(result, task, nil)
+    end
+  end
+
+  @spec default_supervisor :: atom()
+  def default_supervisor, do: Configuration.default_supervisor()
+
+  defp build(%Task{} = task), do: %Jobbit{task: task}
+
+  defp handle_result(result, task, timeout) do
+    case result do
       {:ok, :ok} ->
         :ok
       {:ok, okay} when is_ok_tuple(okay) ->
@@ -126,24 +190,9 @@ defmodule Jobbit do
       {:exit, {exception, stacktrace}} ->
         error = TaskError.build(task, exception, stacktrace)
         {:error, error}
+      {:exit, signal} when is_atom(signal) ->
+        error = ExitError.build(task, signal)
+        {:error, error}
     end
   end
-
-  @type shutdown :: :brutal_kill | :infinity | non_neg_integer()
-
-  @doc """
-  Shuts down a Jobbit task.
-  """
-  @spec shutdown(t(), shutdown()) :: :ok | {:exit, any} | {:ok, any}
-  def shutdown(%Jobbit{task: task}, shutdown \\ 5_000) do
-    case Task.shutdown(task, shutdown) do
-      nil -> :ok
-      other -> other
-    end
-  end
-
-  @spec default_supervisor :: atom()
-  def default_supervisor, do: Configuration.default_supervisor()
-
-  defp build(%Task{} = task), do: %Jobbit{task: task}
 end

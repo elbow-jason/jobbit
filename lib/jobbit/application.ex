@@ -1,4 +1,5 @@
 defmodule Jobbit.Application do
+  @moduledoc false
   use Application
 
   alias Jobbit.Configuration
@@ -19,6 +20,4 @@ defmodule Jobbit.Application do
       []
     end
   end
-
-
 end

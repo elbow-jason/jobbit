@@ -4,6 +4,9 @@ defmodule JobbitTest do
   alias Jobbit.Configuration
   alias Jobbit.TaskError
   alias Jobbit.TimeoutError
+  alias Jobbit.ExitError
+
+  @moduletag capture_log: true
 
   doctest Jobbit
 
@@ -99,13 +102,15 @@ defmodule JobbitTest do
 
     test "does not crash the calling process when the task crashes" do
       message = "this should not crash the calling process"
-      closure = fn -> raise message end
-      assert {:error, task_error} =
-        closure
-        |> Jobbit.async()
-        |> Jobbit.yield(100)
-      assert %TaskError{exception: exception} = task_error
-      assert %RuntimeError{message: ^message} = exception
+      assert %Jobbit{task: %Task{pid: pid}} = Jobbit.async(fn -> raise message end)
+      assert_receive({:DOWN, _, _, ^pid, {%RuntimeError{message: ^message}, _}}, 50)
+    end
+
+    setup :start_testing_supervisor
+    test "does not crash the calling process when the task process exits", %{sup: sup} do
+      assert %Jobbit{task: %Task{pid: pid}} = Jobbit.async(sup, fn -> :timer.sleep(52) end)
+      Process.exit(pid, :kaboom)
+      assert_receive({:DOWN, _, _, ^pid, :kaboom}, 50)
     end
   end
 
@@ -135,14 +140,21 @@ defmodule JobbitTest do
   end
 
   describe "yield/2" do
+    setup :start_testing_supervisor
+    test "does not crash the caller when task process is signaled to exit (bug regression test from 27 AUG 2020)", %{sup: sup} do
+      assert %Jobbit{task: %Task{pid: pid}} = task = Jobbit.async(sup, fn -> :timer.sleep(1000) end)
+      true = Process.exit(pid, :some_exit_signal)
+      assert {:error, %ExitError{reason: :some_exit_signal}} = Jobbit.yield(task, 30)
+    end
+
     test "does not crash the caller when yielding a :badarith task exception (bug regression test from 23 APR 2020)" do
       job = Jobbit.async_apply(Kernel, :div, [1, 0])
       assert {:error, %TaskError{}} = Jobbit.yield(job, 30)
     end
 
-    test "returns {:error, %TaskError{}} when the task crashes" do
+    test "returns {:error, %TaskError{}} when the task crashes", ctx do
       assert {:error, %TaskError{}} =
-        fn -> to_string({:tuple, "does_not_implement_String.Chars"}) end
+        fn -> raise "this raise intentional and is meant to crash the task of #{inspect(ctx.test)}" end
         |> Jobbit.async()
         |> Jobbit.yield(30)
     end
@@ -160,7 +172,7 @@ defmodule JobbitTest do
       assert Process.alive?(pid) == false
     end
 
-    test "a task is not alive after it crashes (duh?)" do
+    test "a task is not alive after it crashes" do
       assert %Jobbit{task: %Task{pid: pid}} = job = Jobbit.async(fn -> raise "boom" end)
       assert {:error, %TaskError{}} = Jobbit.yield(job, 100)
       assert Process.alive?(pid) == false
@@ -169,6 +181,13 @@ defmodule JobbitTest do
     test "a task is not alive after it times out" do
       assert %Jobbit{task: %Task{pid: pid}} = job = Jobbit.async(fn -> :timer.sleep(1000) end)
       assert {:error, %TimeoutError{}} = Jobbit.yield(job, 1)
+      assert Process.alive?(pid) == false
+    end
+
+    test "a task is not alive after it is signaled to exit" do
+      assert %Jobbit{task: %Task{pid: pid}} = job = Jobbit.async(fn -> :timer.sleep(1000) end)
+      true = Process.exit(pid, :kaboom)
+      assert {:error, %ExitError{}} = Jobbit.yield(job, 1)
       assert Process.alive?(pid) == false
     end
 
@@ -221,5 +240,4 @@ defmodule JobbitTest do
   def start_testing_supervisor(_ctx) do
     {:ok, sup: start_testing_supervisor()}
   end
-
 end
