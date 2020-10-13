@@ -156,6 +156,20 @@ defmodule Jobbit do
     handle_result(result, task, timeout)
   end
 
+  @doc """
+  Synchronously blocks the caller waiting for the List of Jobbit tasks to finish
+  """
+  @spec yield_many([Jobbit.t()], timeout) :: [result()]
+  def yield_many(tasks, timeout \\ 5_000) do
+    tasks
+    |> Enum.map(& &1.task)
+    |> Task.yield_many(timeout)
+    |> Enum.map(fn {task, res} ->
+      result = res || Task.shutdown(task)
+      handle_result(result, task, timeout)
+    end)
+  end
+
   @type shutdown :: :brutal_kill | :infinity | non_neg_integer()
 
   @doc """
